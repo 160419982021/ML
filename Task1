@@ -1,1 +1,256 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.neural_network import MLPRegressor
+import pandas as pd
+import warnings
+warnings.filterwarnings("ignore")
+
+# Define forward kinematics
+def direct_kin_(joints, links, origin = [0, 0]):
+    X = np.zeros(3)
+    Y = np.zeros(3)
+    X[0], Y[0] = origin
+    X[1] = X[0] + links[0] * np.cos(joints[0])
+    Y[1] = Y[0] + links[0] * np.sin(joints[0])
+    X[2] = X[1] + links[1] * np.cos(joints[0] + joints[1])
+    Y[2] = Y[1] + links[1] * np.sin(joints[0] + joints[1])
+    return [X, Y]
+
+# Arm class definition
+class arm():
+    def __init__(self, links=[10, 10], origin=[0, 0], init=[0, 0]):
+        self.link1, self.link2 = links
+        self.x0, self.y0 = origin
+        self.joint1, self.joint2 = init
+        self.direct_kin()
+
+    def direct_kin(self):
+        [self.X, self.Y] = direct_kin_([self.joint1, self.joint2], [self.link1, self.link2], [self.x0, self.y0])
+
+    def plot_arm(self):
+        plt.plot([-20, 20], [0, 0], 'k')
+        plt.plot(self.X, self.Y, linewidth=2.0)
+        plt.plot(self.X, self.Y, 'ro', linewidth=2.0)
+        sum_links = (self.link1 + self.link2) * 1.1
+        plt.axis([-sum_links, sum_links, -1, sum_links])
+        plt.axis('equal')
+        plt.show()
+
+    def create_data(self, ann, n_train, n_test, range1, range2):
+        self.inv_solver = ann
+        n_data = n_train + n_test
+        joint_space = np.hstack((np.random.uniform(range1[0], range1[1], (n_data, 1)),
+                                 np.random.uniform(range2[0], range2[1], (n_data, 1))))
+        cartesian_space = np.zeros(joint_space.shape)
+        for i in range(n_data):
+            ax, ay = direct_kin_(joint_space[i], [self.link1, self.link2])
+            cartesian_space[i] = [ax[2], ay[2]]
+        self.cart_train = cartesian_space[:n_train]
+        self.joint_train = joint_space[:n_train]
+        self.cart_test = cartesian_space[n_train:]
+        self.joint_test = joint_space[n_train:]
+
+    def train_inv_kin(self):
+        self.inv_solver.fit(self.cart_train, self.joint_train)
+        return self.inv_solver.score(self.cart_train, self.joint_train)
+
+    def test_inv_kin(self):
+        return self.inv_solver.score(self.cart_test, self.joint_test)
+
+    def inv_kin(self, Cartesian):
+        joints = self.inv_solver.predict([Cartesian])
+        self.joint1, self.joint2 = joints[0]
+        self.direct_kin()
+        err = np.sqrt((Cartesian[0]-self.X[2])**2 + (Cartesian[1]-self.Y[2])**2)
+        return err, [self.X[2], self.Y[2]]
+
+# Test different network structures
+configs = [
+    {"layers": (10,), "activation": "tanh", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (20, 10), "activation": "tanh", "solver": "sgd", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (30, 20), "activation": "tanh", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (40,), "activation": "tanh", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (50, 30), "activation": "tanh", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (150, 75, 25), "activation": "tanh", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+
+    {"layers": (10,), "activation": "relu", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (20, 10), "activation": "relu", "solver": "sgd", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (30, 20), "activation": "relu", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (40,), "activation": "relu", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (50, 30), "activation": "relu", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (150, 75, 25), "activation": "relu", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+
+    {"layers": (10,), "activation": "logistic", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (20, 10), "activation": "logistic", "solver": "sgd", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (30, 20), "activation": "logistic", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (40,), "activation": "logistic", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (50, 30), "activation": "logistic", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (150, 75, 25), "activation": "logistic", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+
+    ]
+
+#     '''
+# lines comemts
+
+# ctrl+/
+# ctrl+shift+/
+
+#     '''
+
+'''
+    {"layers": (10,), "activation": "relu", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 200},
+    {"layers": (20, 10), "activation": "tanh", "solver": "sgd", "learning_rate_init": 0.01, "max_iter": 500},
+    {"layers": (30, 20), "activation": "logistic", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 1000},
+    {"layers": (40,), "activation": "relu", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 500},
+    {"layers": (50, 30), "activation": "relu", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 2000},
+    {"layers": (100, 50, 20), "activation": "tanh", "solver": "adam", "learning_rate_init": 0.001, "max_iter": 2000},
+'''
+
+
+
+
+
+results = []
+arm_instance = arm()
+
+# Run experiments
+for cfg in configs:
+    model = MLPRegressor(hidden_layer_sizes=cfg["layers"],
+                         activation=cfg["activation"],
+                         solver=cfg["solver"],
+                         learning_rate_init=cfg["learning_rate_init"],
+                         max_iter=cfg["max_iter"],
+                         early_stopping=True,
+                         random_state=42)
+
+    arm_instance.create_data(model, n_train=1000, n_test=300, range1=[0, np.pi], range2=[0, np.pi])
+    train_score = arm_instance.train_inv_kin()
+    test_score = arm_instance.test_inv_kin()
+
+    # Calculate inverse kinematics error
+    total_err = 0
+    for i in range(len(arm_instance.cart_test)):
+        err, _ = arm_instance.inv_kin(arm_instance.cart_test[i])
+        total_err += err
+    avg_error = total_err / len(arm_instance.cart_test)
+
+    print("Configuration:", cfg)
+    print(f"Training Accuracy (R²): {train_score:.4f}")
+    print(f"Test Accuracy (R²): {test_score:.4f}")
+    print(f"Average IK Error: {avg_error:.4f}")
+    print("-" * 50)
+
+    results.append({
+        "Configuration": str(cfg),
+        "Train_R2": train_score,
+        "Test_R2": test_score,
+        "IK_Error": avg_error
+    })
+
+# Save results
+results_df = pd.DataFrame(results)
+results_df.to_csv("ann_inverse_kinematics_results.csv", index=False)
+
+# Optional: plot predicted vs actual joint angles
+predicted = model.predict(arm_instance.cart_test)
+actual = arm_instance.joint_test
+
+plt.figure(figsize=(8, 4))
+plt.scatter(actual[:, 0], predicted[:, 0], label="Joint 1", alpha=0.6)
+plt.scatter(actual[:, 1], predicted[:, 1], label="Joint 2", alpha=0.6)
+plt.plot([0, np.pi], [0, np.pi], 'k--')
+plt.xlabel("Actual")
+plt.ylabel("Predicted")
+plt.legend()
+plt.title("Predicted vs Actual Joint Angles")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+
+
+
+#-----------------------------------------ANOTHER CELL-----------------------------------------#
+
+import matplotlib.pyplot as plt
+
+# Data parsed from the provided configurations
+configurations = [
+    {'label': "(10,) tanh", 'test_acc': 0.9307},
+    {'label': "(20,10) tanh", 'test_acc': 0.9466},
+    {'label': "(30,20) tanh", 'test_acc': 0.9814},
+    {'label': "(40,) tanh", 'test_acc': 0.9555},
+    {'label': "(50,30) tanh", 'test_acc': 0.9755},
+    {'label': "(150,75,25) tanh", 'test_acc': 0.9911},
+    {'label': "(10,) relu", 'test_acc': 0.8993},
+    {'label': "(20,10) relu", 'test_acc': 0.9488},
+    {'label': "(30,20) relu", 'test_acc': 0.9767},
+    {'label': "(40,) relu", 'test_acc': 0.9650},
+    {'label': "(50,30) relu", 'test_acc': 0.9824},
+    {'label': "(150,75,25) relu", 'test_acc': 0.9822},
+    {'label': "(10,) logistic", 'test_acc': 0.8328},
+    {'label': "(20,10) logistic", 'test_acc': 0.5007},
+    {'label': "(30,20) logistic", 'test_acc': 0.9693},
+    {'label': "(40,) logistic", 'test_acc': 0.9244},
+    {'label': "(50,30) logistic", 'test_acc': 0.9741},
+    {'label': "(150,75,25) logistic", 'test_acc': 0.9661},
+]
+
+# Sort by test accuracy
+configurations.sort(key=lambda x: x['test_acc'], reverse=True)
+
+# Extract labels and test accuracies
+labels = [conf['label'] for conf in configurations]
+test_accuracies = [conf['test_acc'] for conf in configurations]
+
+# Plotting
+plt.figure(figsize=(12, 6))
+plt.barh(labels, test_accuracies, color='skyblue')
+plt.xlabel('Test Accuracy (R²)')
+plt.title('Test Accuracy by Configuration')
+plt.gca().invert_yaxis()  # Highest accuracy on top
+plt.grid(axis='x')
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+#-----------------------------------------ANOTHER CELL-----------------------------------------#
+
+
+
+
+import matplotlib.pyplot as plt
+
+# Labels and Test Accuracy values from the configurations
+labels = [
+    "(10,), tanh", "(20,10), tanh", "(30,20), tanh", "(40,), tanh", "(50,30), tanh", "(150,75,25), tanh",
+    "(10,), relu", "(20,10), relu", "(30,20), relu", "(40,), relu", "(50,30), relu", "(150,75,25), relu",
+    "(10,), logistic", "(20,10), logistic", "(30,20), logistic", "(40,), logistic", "(50,30), logistic", "(150,75,25), logistic"
+]
+
+test_scores = [
+    0.9307, 0.9466, 0.9814, 0.9555, 0.9755, 0.9911,
+    0.8993, 0.9488, 0.9767, 0.9650, 0.9824, 0.9822,
+    0.8328, 0.5007, 0.9693, 0.9244, 0.9741, 0.9661
+]
+
+# Find the index of the best (highest) test score
+best_index = test_scores.index(max(test_scores))
+
+# Create the bar plot
+plt.figure(figsize=(14, 6))
+bars = plt.bar(labels, test_scores, color='skyblue')
+bars[best_index].set_color('green')
+
+# Plot aesthetics
+plt.title("Test Accuracy (R²) by ANN Configuration")
+plt.ylabel("Test R² Score")
+plt.ylim(0.4, 1.05)
+plt.xticks(rotation=45, ha='right')
+plt.grid(axis='y')
+plt.tight_layout()
+plt.show()
 
